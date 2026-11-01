@@ -28,9 +28,10 @@ namespace gdai {
             if (m_playing && layer && layer->m_player1) {
                 while (m_nextEvent < m_events.size() && m_events[m_nextEvent].frame <= m_playFrame) {
                     const auto& e = m_events[m_nextEvent++];
-                    auto button = static_cast<PlayerButton>(e.button);
-                    if (e.down) layer->m_player1->pushButton(button);
-                    else layer->m_player1->releaseButton(button);
+                    // Route playback through the game's input dispatcher.
+                    // Calling PlayerObject::pushButton/releaseButton directly does
+                    // not reproduce the complete gameplay input path on Android.
+                    layer->handleButton(e.down, e.button, false);
                 }
                 if (m_nextEvent >= m_events.size()) m_playing = false;
                 else ++m_playFrame;
