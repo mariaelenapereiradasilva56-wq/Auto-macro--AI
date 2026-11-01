@@ -29,6 +29,7 @@ public:
         };
         buildBubble();
         buildWindow();
+        setMacroProgress(0.f);
         m_window->setVisible(false);
         this->setTouchEnabled(true);
         this->setTouchMode(kCCTouchesOneByOne);
