@@ -1,11 +1,9 @@
 {
   "geode": "5.11.2",
-  "gd": {
-    "android": "2.2081"
-  },
+  "gd": { "android": "2.2081" },
   "id": "gdai.mobile",
   "name": "GD AI MOD",
-  "version": "v0.1.0",
+  "version": "v0.2.0",
   "developer": "GD AI MOD Project",
-  "description": "Android prototype: IA and PLAY controls with frame-based macro timeline foundation."
+  "description": "Windows XP-style draggable floating panel across Geometry Dash scenes."
 }
