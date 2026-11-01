@@ -22,8 +22,8 @@ public:
     bool init() override {
         if (!CCLayer::init()) return false;
         m_screen = CCDirector::sharedDirector()->getWinSize();
-        m_bubblePos = {36.f, m_screen.height * 0.52f};
-        m_windowPos = {
+        m_bubblePos = CCPoint{36.f, m_screen.height * 0.52f};
+        m_windowPos = CCPoint{
             std::max(8.f, (m_screen.width - WINDOW_W) / 2.f),
             std::max(8.f, (m_screen.height - WINDOW_H) / 2.f)
         };
@@ -48,7 +48,7 @@ public:
 
         if (inside(p, m_bubblePos.x - 27.f, m_bubblePos.y - 27.f, 54.f, 54.f)) {
             m_action = TouchAction::Bubble;
-            m_dragOffset = {m_bubblePos.x - p.x, m_bubblePos.y - p.y};
+            m_dragOffset = CCPoint{m_bubblePos.x - p.x, m_bubblePos.y - p.y};
             return true;
         }
 
@@ -60,7 +60,7 @@ public:
                 else if (localX >= WINDOW_W - 70.f) m_action = TouchAction::Minimize;
                 else {
                     m_action = TouchAction::WindowDrag;
-                    m_dragOffset = {m_windowPos.x - p.x, m_windowPos.y - p.y};
+                    m_dragOffset = CCPoint{m_windowPos.x - p.x, m_windowPos.y - p.y};
                 }
             } else if (inside(p, m_windowPos.x + 22.f, m_windowPos.y + 34.f, 112.f, 42.f)) {
                 m_action = TouchAction::IA;
