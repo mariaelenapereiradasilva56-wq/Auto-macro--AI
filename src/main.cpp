@@ -62,9 +62,9 @@ public:
                     m_action = TouchAction::WindowDrag;
                     m_dragOffset = CCPoint{m_windowPos.x - p.x, m_windowPos.y - p.y};
                 }
-            } else if (inside(p, m_windowPos.x + 22.f, m_windowPos.y + 34.f, 112.f, 42.f)) {
+            } else if (inside(p, m_windowPos.x + 18.f, m_windowPos.y + 25.f, 132.f, 42.f)) {
                 m_action = TouchAction::IA;
-            } else if (inside(p, m_windowPos.x + 164.f, m_windowPos.y + 34.f, 112.f, 42.f)) {
+            } else if (inside(p, m_windowPos.x + 180.f, m_windowPos.y + 25.f, 132.f, 42.f)) {
                 m_action = TouchAction::Play;
             } else {
                 m_action = TouchAction::WindowBody;
@@ -101,7 +101,7 @@ public:
                 case TouchAction::IA:
                     FLAlertLayer::create(
                         "GD AI - IA",
-                        "Windows XP interface online!\n\nLevel scanning and route analysis are still under development.",
+                        "Macro Generator ready.\n\nCreation progress: 0%. The analysis and macro-generation engine is not implemented yet, so progress will only advance when real generation steps are connected.",
                         "OK"
                     )->show();
                     break;
@@ -124,8 +124,8 @@ public:
     }
 
 private:
-    static constexpr float WINDOW_W = 300.f;
-    static constexpr float WINDOW_H = 210.f;
+    static constexpr float WINDOW_W = 330.f;
+    static constexpr float WINDOW_H = 250.f;
     static constexpr float TITLE_H = 30.f;
 
     enum class TouchAction { None, Bubble, WindowDrag, WindowBody, IA, Play, Minimize, Close };
@@ -138,6 +138,9 @@ private:
     CCDrawNode* m_bubble = nullptr;
     CCLabelBMFont* m_bubbleLabel = nullptr;
     CCLayerColor* m_window = nullptr;
+    CCLayerColor* m_progressFill = nullptr;
+    CCLabelBMFont* m_progressLabel = nullptr;
+    float m_macroProgress = 0.f;
     TouchAction m_action = TouchAction::None;
     bool m_moved = false;
 
@@ -185,6 +188,18 @@ private:
         parent->addChild(label, 20);
     }
 
+    void setMacroProgress(float progress) {
+        m_macroProgress = std::max(0.f, std::min(100.f, progress));
+        if (m_progressFill) {
+            m_progressFill->setContentSize(CCSizeMake(std::max(1.f, 270.f * m_macroProgress / 100.f), 9.f));
+            m_progressFill->setVisible(m_macroProgress > 0.f);
+        }
+        if (m_progressLabel) {
+            auto value = std::to_string(static_cast<int>(m_macroProgress)) + "%";
+            m_progressLabel->setString(value.c_str());
+        }
+    }
+
     void buildWindow() {
         m_window = CCLayerColor::create(ccc4(35, 55, 86, 255), WINDOW_W, WINDOW_H);
         m_window->setAnchorPoint({0.f, 0.f});
@@ -203,17 +218,32 @@ private:
         addRect(m_window, WINDOW_W - 35.f, WINDOW_H - 25.f, 25.f, 19.f, ccc4(210, 70, 65, 255));
         addText(m_window, "X", WINDOW_W - 22.f, WINDOW_H - 16.f, 0.42f, ccc3(255, 255, 255));
 
-        addText(m_window, "Welcome to GD AI!", WINDOW_W / 2.f, 145.f, 0.48f, ccc3(30, 50, 80));
-        addText(m_window, "Choose an action:", WINDOW_W / 2.f, 118.f, 0.38f, ccc3(55, 55, 55));
+        addText(m_window, "NEURAL MACRO GENERATOR", WINDOW_W / 2.f, 190.f, 0.42f, ccc3(30, 50, 80));
+        addText(m_window, "Macro creation progress", WINDOW_W / 2.f, 164.f, 0.34f, ccc3(55, 55, 55));
+
+        // Progress track starts empty. It only advances when real generation work is connected.
+        addRect(m_window, 28.f, 137.f, 274.f, 13.f, ccc4(95, 105, 115, 255));
+        addRect(m_window, 30.f, 139.f, 270.f, 9.f, ccc4(235, 235, 235, 255));
+        m_progressFill = CCLayerColor::create(ccc4(35, 175, 75, 255), 1.f, 9.f);
+        m_progressFill->setAnchorPoint({0.f, 0.f});
+        m_progressFill->setPosition({30.f, 139.f});
+        m_window->addChild(m_progressFill, 10);
+        m_progressLabel = CCLabelBMFont::create("0%", "bigFont.fnt");
+        m_progressLabel->setScale(0.48f);
+        m_progressLabel->setColor(ccc3(20, 65, 30));
+        m_progressLabel->setPosition({WINDOW_W / 2.f, 116.f});
+        m_window->addChild(m_progressLabel, 20);
+        addText(m_window, "Waiting for analysis engine", WINDOW_W / 2.f, 94.f, 0.30f, ccc3(75, 75, 75));
+        addText(m_window, "Analyze  >  Generate  >  Test  >  Finish", WINDOW_W / 2.f, 75.f, 0.25f, ccc3(75, 75, 75));
 
         // Click targets are handled by this layer's touch delegate.
-        addRect(m_window, 22.f, 34.f, 112.f, 42.f, ccc4(30, 105, 190, 255));
-        addRect(m_window, 24.f, 36.f, 108.f, 38.f, ccc4(220, 232, 245, 255));
-        addText(m_window, "IA", 78.f, 55.f, 0.58f, ccc3(0, 45, 110));
-        addRect(m_window, 164.f, 34.f, 112.f, 42.f, ccc4(30, 105, 190, 255));
-        addRect(m_window, 166.f, 36.f, 108.f, 38.f, ccc4(220, 232, 245, 255));
-        addText(m_window, "PLAY", 220.f, 55.f, 0.48f, ccc3(0, 45, 110));
-        addText(m_window, "v0.2.0 - XP Edition", WINDOW_W / 2.f, 17.f, 0.30f, ccc3(70, 70, 70));
+        addRect(m_window, 18.f, 25.f, 132.f, 42.f, ccc4(30, 105, 190, 255));
+        addRect(m_window, 20.f, 27.f, 128.f, 38.f, ccc4(220, 232, 245, 255));
+        addText(m_window, "IA", 84.f, 46.f, 0.58f, ccc3(0, 45, 110));
+        addRect(m_window, 180.f, 25.f, 132.f, 42.f, ccc4(30, 105, 190, 255));
+        addRect(m_window, 182.f, 27.f, 128.f, 38.f, ccc4(220, 232, 245, 255));
+        addText(m_window, "PLAY", 246.f, 46.f, 0.48f, ccc3(0, 45, 110));
+        addText(m_window, "v0.3.0 - Neural Macro", WINDOW_W / 2.f, 10.f, 0.28f, ccc3(70, 70, 70));
     }
 };
 
