@@ -2,8 +2,90 @@
 #include <Geode/modify/CCScene.hpp>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <filesystem>
+#include <system_error>
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
+#include <Geode/binding/PlayLayer.hpp>
+#include <Geode/binding/PlayerObject.hpp>
 
 using namespace geode::prelude;
+
+
+namespace gdai {
+    struct MacroEvent { uint64_t frame; int button; bool down; };
+    class MacroEngine {
+    public:
+        static MacroEngine& get() { static MacroEngine value; return value; }
+        void resetAttempt() {
+            m_frame = 0;
+            if (m_playing) { m_playFrame = 0; m_nextEvent = 0; }
+        }
+        void tick(PlayLayer* layer) {
+            if (m_playing && layer && layer->m_player1) {
+                while (m_nextEvent < m_events.size() && m_events[m_nextEvent].frame <= m_playFrame) {
+                    const auto& e = m_events[m_nextEvent++];
+                    auto button = static_cast<PlayerButton>(e.button);
+                    if (e.down) layer->m_player1->pushButton(button);
+                    else layer->m_player1->releaseButton(button);
+                }
+                if (m_nextEvent >= m_events.size()) m_playing = false;
+                else ++m_playFrame;
+            }
+            ++m_frame;
+        }
+        void record(int button, bool down) {
+            if (m_recording) m_events.push_back({m_frame, button, down});
+        }
+        bool startRecording() {
+            if (m_playing) return false;
+            m_events.clear(); m_frame = 0; m_recording = true; return true;
+        }
+        bool stopRecording() {
+            if (!m_recording) return false;
+            m_recording = false; return save();
+        }
+        bool startPlayback() {
+            if (m_recording) return false;
+            if (m_events.empty()) load();
+            if (m_events.empty()) return false;
+            m_playFrame = 0; m_nextEvent = 0; m_playing = true; return true;
+        }
+        bool isRecording() const { return m_recording; }
+        size_t eventCount() const { return m_events.size(); }
+    private:
+        std::vector<MacroEvent> m_events;
+        uint64_t m_frame = 0, m_playFrame = 0;
+        size_t m_nextEvent = 0;
+        bool m_recording = false, m_playing = false;
+        std::filesystem::path filePath() const { return Mod::get()->getSaveDir() / "last_macro.csv"; }
+        bool save() {
+            std::error_code ec;
+            auto path = filePath();
+            std::filesystem::create_directories(path.parent_path(), ec);
+            std::ofstream out(path);
+            if (!out) return false;
+            out << "frame,button,down\n";
+            for (const auto& e : m_events) out << e.frame << "," << e.button << "," << (e.down ? 1 : 0) << "\n";
+            return static_cast<bool>(out);
+        }
+        bool load() {
+            std::ifstream in(filePath());
+            if (!in) return false;
+            std::string line; m_events.clear(); std::getline(in, line);
+            while (std::getline(in, line)) {
+                std::stringstream ss(line); std::string frame, button, down;
+                if (!std::getline(ss, frame, ',') || !std::getline(ss, button, ',') || !std::getline(ss, down)) continue;
+                try { m_events.push_back({std::stoull(frame), std::stoi(button), std::stoi(down) != 0}); }
+                catch (...) { m_events.clear(); return false; }
+            }
+            return !m_events.empty();
+        }
+    };
+}
 
 // GD AI floating desktop-style control panel.
 // One overlay is attached to each root scene: menus, level screens and gameplay.
@@ -63,9 +145,11 @@ public:
                     m_action = TouchAction::WindowDrag;
                     m_dragOffset = CCPoint{m_windowPos.x - p.x, m_windowPos.y - p.y};
                 }
-            } else if (inside(p, m_windowPos.x + 18.f, m_windowPos.y + 25.f, 132.f, 42.f)) {
+            } else if (inside(p, m_windowPos.x + 12.f, m_windowPos.y + 25.f, 92.f, 42.f)) {
                 m_action = TouchAction::IA;
-            } else if (inside(p, m_windowPos.x + 180.f, m_windowPos.y + 25.f, 132.f, 42.f)) {
+            } else if (inside(p, m_windowPos.x + 116.f, m_windowPos.y + 25.f, 92.f, 42.f)) {
+                m_action = TouchAction::Record;
+            } else if (inside(p, m_windowPos.x + 222.f, m_windowPos.y + 25.f, 96.f, 42.f)) {
                 m_action = TouchAction::Play;
             } else {
                 m_action = TouchAction::WindowBody;
@@ -100,19 +184,36 @@ public:
                     m_window->setVisible(false);
                     break;
                 case TouchAction::IA:
-                    FLAlertLayer::create(
-                        "GD AI - IA",
-                        "Macro Generator ready.\n\nCreation progress: 0%. The analysis and macro-generation engine is not implemented yet, so progress will only advance when real generation steps are connected.",
-                        "OK"
-                    )->show();
+                    FLAlertLayer::create("GD AI - IA",
+                        "Neural level analysis is the next development stage. This release records and replays player 1 inputs.",
+                        "OK")->show();
                     break;
-                case TouchAction::Play:
-                    FLAlertLayer::create(
-                        "GD AI - PLAY",
-                        "PLAY control detected!\n\nAutomatic gameplay input is not implemented yet. This button is currently an interface test.",
-                        "OK"
-                    )->show();
+                case TouchAction::Record: {
+                    auto& engine = gdai::MacroEngine::get();
+                    if (engine.isRecording()) {
+                        bool saved = engine.stopRecording();
+                        FLAlertLayer::create(saved ? "Macro saved" : "Save failed",
+                            fmt::format("{} input events recorded.\\n{}",
+                                engine.eventCount(),
+                                saved ? "Press PLAY to replay it." : "Could not save the macro in the mod data folder."),
+                            "OK")->show();
+                    } else {
+                        bool started = engine.startRecording();
+                        FLAlertLayer::create(started ? "Recording started" : "Cannot record",
+                            started ? "Play normally, then press REC again to stop and save." : "Stop playback before recording.",
+                            "OK")->show();
+                    }
                     break;
+                }
+                case TouchAction::Play: {
+                    auto& engine = gdai::MacroEngine::get();
+                    bool started = engine.startPlayback();
+                    FLAlertLayer::create(started ? "Macro playback" : "No macro available",
+                        started ? fmt::format("Playing {} recorded input events.", engine.eventCount())
+                                : "Record a run first using REC. The macro is saved locally on this device.",
+                        "OK")->show();
+                    break;
+                }
                 default:
                     break;
             }
@@ -129,7 +230,7 @@ private:
     static constexpr float WINDOW_H = 250.f;
     static constexpr float TITLE_H = 30.f;
 
-    enum class TouchAction { None, Bubble, WindowDrag, WindowBody, IA, Play, Minimize, Close };
+    enum class TouchAction { None, Bubble, WindowDrag, WindowBody, IA, Record, Play, Minimize, Close };
 
     CCSize m_screen;
     CCPoint m_bubblePos;
@@ -219,7 +320,7 @@ private:
         addRect(m_window, WINDOW_W - 35.f, WINDOW_H - 25.f, 25.f, 19.f, ccc4(210, 70, 65, 255));
         addText(m_window, "X", WINDOW_W - 22.f, WINDOW_H - 16.f, 0.42f, ccc3(255, 255, 255));
 
-        addText(m_window, "NEURAL MACRO GENERATOR", WINDOW_W / 2.f, 190.f, 0.42f, ccc3(30, 50, 80));
+        addText(m_window, "MACRO RECORDER / PLAYER", WINDOW_W / 2.f, 190.f, 0.42f, ccc3(30, 50, 80));
         addText(m_window, "Macro creation progress", WINDOW_W / 2.f, 164.f, 0.34f, ccc3(55, 55, 55));
 
         // Progress track starts empty. It only advances when real generation work is connected.
@@ -237,14 +338,48 @@ private:
         addText(m_window, "Waiting for analysis engine", WINDOW_W / 2.f, 94.f, 0.30f, ccc3(75, 75, 75));
         addText(m_window, "Analyze  >  Generate  >  Test  >  Finish", WINDOW_W / 2.f, 75.f, 0.25f, ccc3(75, 75, 75));
 
-        // Click targets are handled by this layer's touch delegate.
-        addRect(m_window, 18.f, 25.f, 132.f, 42.f, ccc4(30, 105, 190, 255));
-        addRect(m_window, 20.f, 27.f, 128.f, 38.f, ccc4(220, 232, 245, 255));
-        addText(m_window, "IA", 84.f, 46.f, 0.58f, ccc3(0, 45, 110));
-        addRect(m_window, 180.f, 25.f, 132.f, 42.f, ccc4(30, 105, 190, 255));
-        addRect(m_window, 182.f, 27.f, 128.f, 38.f, ccc4(220, 232, 245, 255));
-        addText(m_window, "PLAY", 246.f, 46.f, 0.48f, ccc3(0, 45, 110));
-        addText(m_window, "v0.3.0 - Neural Macro", WINDOW_W / 2.f, 10.f, 0.28f, ccc3(70, 70, 70));
+        addRect(m_window, 12.f, 25.f, 92.f, 42.f, ccc4(30, 105, 190, 255));
+        addRect(m_window, 14.f, 27.f, 88.f, 38.f, ccc4(220, 232, 245, 255));
+        addText(m_window, "IA", 58.f, 46.f, 0.52f, ccc3(0, 45, 110));
+        addRect(m_window, 116.f, 25.f, 92.f, 42.f, ccc4(30, 105, 190, 255));
+        addRect(m_window, 118.f, 27.f, 88.f, 38.f, ccc4(220, 232, 245, 255));
+        addText(m_window, "REC", 162.f, 46.f, 0.44f, ccc3(0, 45, 110));
+        addRect(m_window, 222.f, 25.f, 96.f, 42.f, ccc4(30, 105, 190, 255));
+        addRect(m_window, 224.f, 27.f, 92.f, 38.f, ccc4(220, 232, 245, 255));
+        addText(m_window, "PLAY", 270.f, 46.f, 0.42f, ccc3(0, 45, 110));
+        addText(m_window, "v0.4.0 - Macro Engine", WINDOW_W / 2.f, 10.f, 0.28f, ccc3(70, 70, 70));
+    }
+};
+
+
+class $modify(GDAIPlayer, PlayerObject) {
+    bool pushButton(PlayerButton button) {
+        bool result = PlayerObject::pushButton(button);
+        auto layer = PlayLayer::get();
+        if (layer && this == layer->m_player1) gdai::MacroEngine::get().record(static_cast<int>(button), true);
+        return result;
+    }
+    bool releaseButton(PlayerButton button) {
+        bool result = PlayerObject::releaseButton(button);
+        auto layer = PlayLayer::get();
+        if (layer && this == layer->m_player1) gdai::MacroEngine::get().record(static_cast<int>(button), false);
+        return result;
+    }
+};
+
+class $modify(GDAIPlayLayer, PlayLayer) {
+    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+        if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+        gdai::MacroEngine::get().resetAttempt();
+        return true;
+    }
+    void update(float dt) {
+        PlayLayer::update(dt);
+        gdai::MacroEngine::get().tick(this);
+    }
+    void resetLevel() {
+        PlayLayer::resetLevel();
+        gdai::MacroEngine::get().resetAttempt();
     }
 };
 
