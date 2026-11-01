@@ -3,7 +3,7 @@
   "gd": { "android": "2.2081" },
   "id": "gdai.mobile",
   "name": "GD AI MOD",
-  "version": "v0.3.0",
+  "version": "v0.4.0",
   "developer": "GD AI MOD Project",
-  "description": "Windows XP-style floating panel with a macro-generation progress display prototype."
+  "description": "Windows XP-style panel with a frame-based macro recorder and player for Android64."
 }
